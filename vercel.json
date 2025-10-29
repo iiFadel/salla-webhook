@@ -4,9 +4,6 @@
     { "src": "/api/webhook", "dest": "/api/webhook.js" }
   ],
   "crons": [
-    {
-      "path": "/api/refresh-tokens",
-      "schedule": "0 0 */10 * *"
-    }
+    { "path": "/api/refresh-tokens", "schedule": "*/1 * * * *" }
   ]
 }
