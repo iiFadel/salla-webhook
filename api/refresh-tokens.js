@@ -1,4 +1,6 @@
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
+
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization;
@@ -7,19 +9,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    
-    const keys = await kv.keys("store:*:tokens");
+    // Get all stored merchants
+    const keys = await redis.keys("store:*:tokens");
     
     const results = [];
 
     for (const key of keys) {
-      const tokenData = await kv.get(key);
+      const tokenDataStr = await redis.get(key);
       
-      if (!tokenData) continue;
+      if (!tokenDataStr) continue;
 
-      const { access_token, refresh_token, merchant } = tokenData;
+      const tokenData = JSON.parse(tokenDataStr);
+      const { refresh_token, merchant } = tokenData;
 
-      
+      // Refresh the token
       const response = await fetch("https://accounts.salla.sa/oauth2/token", {
         method: "POST",
         headers: {
@@ -34,20 +37,21 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        console.error(`❌ Failed to refresh token for ${merchant}:`, await response.text());
-        results.push({ merchant, success: false });
+        const errorText = await response.text();
+        console.error(`❌ Failed to refresh token for ${merchant}:`, errorText);
+        results.push({ merchant, success: false, error: errorText });
         continue;
       }
 
       const newTokens = await response.json();
 
-      
-      await kv.set(`store:${merchant}:tokens`, {
+      // Store the new tokens
+      await redis.set(`store:${merchant}:tokens`, JSON.stringify({
         access_token: newTokens.access_token,
         refresh_token: newTokens.refresh_token,
         expires_at: Date.now() + (newTokens.expires_in * 1000),
         merchant
-      });
+      }));
 
       console.log(`✅ Token refreshed for merchant: ${merchant}`);
       results.push({ merchant, success: true });

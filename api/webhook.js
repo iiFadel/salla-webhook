@@ -1,4 +1,7 @@
 import crypto from "crypto";
+import { Redis } from "@upstash/redis";
+
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -17,20 +20,21 @@ export default async function handler(req, res) {
 
   const { event, data } = req.body;
 
-    if (event === "app.store.authorize") {
+  if (event === "app.store.authorize") {
     const { merchant, access_token, refresh_token, expires_in } = data;
     
-    await kv.set(`store:${merchant}:tokens`, {
+    await redis.set(`store:${merchant}:tokens`, JSON.stringify({
       access_token,
       refresh_token,
       expires_at: Date.now() + (expires_in * 1000),
       merchant
-    });
+    }));
 
     console.log(`✅ Tokens stored for merchant: ${merchant}`);
     return res.status(200).json({ received: true });
   }
-  
+
+  // Existing order status logic
   if (event !== "order.status.updated") {
     console.log(`Ignored event: ${event}`);
     return res.status(200).json({ received: true, ignored: true });
