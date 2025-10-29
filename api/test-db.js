@@ -9,13 +9,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    await redis.set("test-key", JSON.stringify({ 
+    await redis.set("test-key", { 
       message: "Hello from Upstash!", 
       timestamp: Date.now() 
-    }));
+    });
     
-    const dataStr = await redis.get("test-key");
-    const data = JSON.parse(dataStr);
+    const data = await redis.get("test-key");
     
     const keys = await redis.keys("*");
     

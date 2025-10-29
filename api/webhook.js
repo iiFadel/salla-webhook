@@ -23,18 +23,17 @@ export default async function handler(req, res) {
   if (event === "app.store.authorize") {
     const { merchant, access_token, refresh_token, expires_in } = data;
     
-    await redis.set(`store:${merchant}:tokens`, JSON.stringify({
+    await redis.set(`store:${merchant}:tokens`, {
       access_token,
       refresh_token,
       expires_at: Date.now() + (expires_in * 1000),
       merchant
-    }));
+    });
 
     console.log(`✅ Tokens stored for merchant: ${merchant}`);
     return res.status(200).json({ received: true });
   }
 
-  // Existing order status logic
   if (event !== "order.status.updated") {
     console.log(`Ignored event: ${event}`);
     return res.status(200).json({ received: true, ignored: true });

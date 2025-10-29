@@ -9,20 +9,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get all stored merchants
     const keys = await redis.keys("store:*:tokens");
     
     const results = [];
 
     for (const key of keys) {
-      const tokenDataStr = await redis.get(key);
+      const tokenData = await redis.get(key);
       
-      if (!tokenDataStr) continue;
+      if (!tokenData) continue;
 
-      const tokenData = JSON.parse(tokenDataStr);
       const { refresh_token, merchant } = tokenData;
 
-      // Refresh the token
       const response = await fetch("https://accounts.salla.sa/oauth2/token", {
         method: "POST",
         headers: {
@@ -45,13 +42,12 @@ export default async function handler(req, res) {
 
       const newTokens = await response.json();
 
-      // Store the new tokens
-      await redis.set(`store:${merchant}:tokens`, JSON.stringify({
+      await redis.set(`store:${merchant}:tokens`, {
         access_token: newTokens.access_token,
         refresh_token: newTokens.refresh_token,
         expires_at: Date.now() + (newTokens.expires_in * 1000),
         merchant
-      }));
+      });
 
       console.log(`✅ Token refreshed for merchant: ${merchant}`);
       results.push({ merchant, success: true });
