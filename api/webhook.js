@@ -17,6 +17,20 @@ export default async function handler(req, res) {
 
   const { event, data } = req.body;
 
+    if (event === "app.store.authorize") {
+    const { merchant, access_token, refresh_token, expires_in } = data;
+    
+    await kv.set(`store:${merchant}:tokens`, {
+      access_token,
+      refresh_token,
+      expires_at: Date.now() + (expires_in * 1000),
+      merchant
+    });
+
+    console.log(`✅ Tokens stored for merchant: ${merchant}`);
+    return res.status(200).json({ received: true });
+  }
+  
   if (event !== "order.status.updated") {
     console.log(`Ignored event: ${event}`);
     return res.status(200).json({ received: true, ignored: true });
@@ -24,7 +38,6 @@ export default async function handler(req, res) {
 
   console.log(`✅ Order status updated: ${data.id} → ${data.status?.name}`);
 
-  // Example: notify n8n only on paid or cancelled
   const newStatus = data.status?.name?.toLowerCase();
 
   if (newStatus === "paid") {

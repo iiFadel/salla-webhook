@@ -2,5 +2,11 @@
   "version": 2,
   "routes": [
     { "src": "/api/webhook", "dest": "/api/webhook.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/refresh-tokens",
+      "schedule": "0 0 */10 * *"
+    }
   ]
 }
