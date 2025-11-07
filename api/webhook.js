@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   }
 
   // Handle webhook events
-  const { event, merchant, data } = req.body;
+  const { event, merchant, data, created_at } = req.body;
   console.log(`✅ Valid Webhook: ${event}`);
   console.log(`🏪 Merchant: ${merchant}`);
   console.log("📦 Full webhook body:", JSON.stringify(req.body, null, 2));
