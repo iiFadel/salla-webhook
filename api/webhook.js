@@ -81,6 +81,105 @@ export default async function handler(req, res) {
       console.log(`💰 Order total: ${data?.total?.amount} ${data?.total?.currency}`);
       break;
 
+    case "order.updated":
+      const orderId = data?.id;
+      const orderStatus = data?.status?.slug?.toLowerCase();
+      const orderStatusName = data?.status?.name;
+      
+      if (!orderId) {
+        console.error("❌ No order ID found in order.updated event");
+        break;
+      }
+
+      console.log(`📦 Order updated: ${orderId}`);
+      console.log(`📊 Status: ${orderStatusName} (${orderStatus})`);
+      console.log(`💰 Order total: ${data?.amounts?.total?.amount || data?.total?.amount} ${data?.amounts?.total?.currency || data?.total?.currency || "SAR"}`);
+
+      // Handle different order statuses
+      if (orderStatus === "paid" || orderStatus === "completed") {
+        console.log(`💳 Order ${orderId} is paid`);
+        
+        // Trigger N8N payment webhook if configured
+        if (process.env.N8N_PAYMENT_WEBHOOK_URL) {
+          try {
+            await fetch(process.env.N8N_PAYMENT_WEBHOOK_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: orderId,
+                reference_id: data.reference_id,
+                status: orderStatus,
+                merchant: merchant,
+                total: data?.amounts?.total || data?.total,
+                customer: data?.customer,
+                event: "order.updated.paid",
+                timestamp: new Date().toISOString(),
+              }),
+            });
+            console.log(`✅ Payment webhook sent to N8N for order ${orderId}`);
+          } catch (error) {
+            console.error(`❌ Failed to send payment webhook:`, error);
+          }
+        }
+      }
+
+      // Check for cancelled status
+      if (orderStatus === "cancelled" || orderStatus === "canceled" || orderStatusName?.toLowerCase().includes("cancel")) {
+        console.log(`❌ Order ${orderId} is cancelled`);
+        
+        // Trigger N8N cancellation webhook if configured
+        if (process.env.N8N_CANCELLATION_WEBHOOK_URL) {
+          try {
+            await fetch(process.env.N8N_CANCELLATION_WEBHOOK_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: orderId,
+                reference_id: data.reference_id,
+                status: orderStatus,
+                merchant: merchant,
+                total: data?.amounts?.total || data?.total,
+                customer: data?.customer,
+                event: "order.updated.cancelled",
+                timestamp: new Date().toISOString(),
+              }),
+            });
+            console.log(`✅ Cancellation webhook sent to N8N for order ${orderId}`);
+          } catch (error) {
+            console.error(`❌ Failed to send cancellation webhook:`, error);
+          }
+        }
+      }
+
+      // Check for newly created order (typically pending or under_review status)
+      if (orderStatus === "pending" || orderStatus === "under_review" || orderStatus === "new" || !data?.status?.slug) {
+        console.log(`🆕 Order ${orderId} is newly created/pending`);
+        
+        // Trigger N8N webhook for new orders if configured
+        if (process.env.N8N_ORDER_CREATED_WEBHOOK_URL) {
+          try {
+            await fetch(process.env.N8N_ORDER_CREATED_WEBHOOK_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: orderId,
+                reference_id: data.reference_id,
+                status: orderStatus,
+                merchant: merchant,
+                total: data?.amounts?.total || data?.total,
+                customer: data?.customer,
+                event: "order.updated.created",
+                timestamp: new Date().toISOString(),
+              }),
+            });
+            console.log(`✅ Order created webhook sent to N8N for order ${orderId}`);
+          } catch (error) {
+            console.error(`❌ Failed to send order created webhook:`, error);
+          }
+        }
+      }
+      break;
+
     case "app.installed":
       console.log(`📲 App installed for merchant: ${merchant}`);
       console.log(`🆔 App ID: ${data?.id}`);
@@ -100,26 +199,6 @@ export default async function handler(req, res) {
       
       console.log(`✅ App info saved for merchant: ${merchant}`);
       break;
-    // case "order.status.updated":
-    //   console.log(`✅ Order status updated: ${data.id} → ${data.status?.name}`);
-    //   const newStatus = data.status?.name?.toLowerCase();
-
-    //   if (newStatus === "paid" && process.env.N8N_PAYMENT_WEBHOOK_URL) {
-    //     await fetch(process.env.N8N_PAYMENT_WEBHOOK_URL, {
-    //       method: "POST",
-    //       headers: { "Content-Type": "application/json" },
-    //       body: JSON.stringify({ order_id: data.id, status: newStatus }),
-    //     });
-    //   }
-
-    //   if ((newStatus === "cancelled" || newStatus === "canceled") && process.env.N8N_CANCELLATION_WEBHOOK_URL) {
-    //     await fetch(process.env.N8N_CANCELLATION_WEBHOOK_URL, {
-    //       method: "POST",
-    //       headers: { "Content-Type": "application/json" },
-    //       body: JSON.stringify({ order_id: data.id, status: newStatus }),
-    //     });
-    //   }
-    //   break;
 
     default:
       console.log(`⚠️ Ignored event: ${event}`);
