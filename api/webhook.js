@@ -2,7 +2,12 @@ import crypto from "crypto";
 import { Redis } from "@upstash/redis";
 
 const redis = Redis.fromEnv();
-//
+
+export const config = {
+  api: {
+    bodyParser: false, // ❌ disable automatic JSON parsing
+  },
+};
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -11,28 +16,40 @@ export default async function handler(req, res) {
   const secret = process.env.SALLA_SECRET;
   const signature = req.headers["x-salla-signature"];
 
-  const payload = JSON.stringify(req.body);
-  const hash = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  // ✅ Read raw body from the request
+  const rawBody = (await getRawBody(req)).toString("utf8");
 
-  if (hash !== signature) {
+  // ✅ Validate signature using raw body
+  const expectedHash = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+
+  if (expectedHash !== signature) {
     return res.status(401).json({ error: "Invalid signature" });
   }
 
-  const { event, data } = req.body;
+  // ✅ Only after validating, parse JSON
+  const { event, data } = JSON.parse(rawBody);
 
+  console.log("✅ Webhook verified:", event);
+
+  // Store access + refresh tokens
   if (event === "app.store.authorize") {
     const { merchant, access_token, refresh_token, expires_in } = data;
-    
+
     await redis.set(`store:${merchant}:tokens`, {
       access_token,
       refresh_token,
-      expires_at: Date.now() + (expires_in * 1000),
-      merchant
+      expires_at: Date.now() + expires_in * 1000,
+      merchant,
     });
 
-    console.log(`✅ Tokens stored for merchant: ${merchant}`);
+    console.log(`✅ Tokens saved for merchant: ${merchant}`);
     return res.status(200).json({ received: true });
   }
+
+  
 
   if (event !== "order.status.updated") {
     console.log(`Ignored event: ${event}`);
