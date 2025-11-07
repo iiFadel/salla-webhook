@@ -3,7 +3,6 @@ import { Redis } from "@upstash/redis";
 const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
-  // ✅ Handle GET requests (webhook verification)
   if (req.method === "GET") {
     return res.status(200).json({ 
       status: "ok", 
@@ -11,7 +10,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // ✅ Handle POST requests (actual webhook events)
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -19,7 +17,7 @@ export default async function handler(req, res) {
   // Token validation
   const headerAuth = req.headers["authorization"];
   const signature = req.headers["x-salla-signature"];
-  const token = process.env.SALLA_WEBHOOK_TOKEN;
+  const token = process.env.SALLA_SECRET;
 
   const valid =
     headerAuth === token ||
@@ -33,23 +31,52 @@ export default async function handler(req, res) {
   }
 
   // Handle webhook events
-  const { event, data } = req.body;
+  const { event, merchant, data } = req.body;
   console.log(`✅ Valid Webhook: ${event}`);
+  console.log("📦 Full webhook body:", JSON.stringify(req.body, null, 2));
 
   switch (event) {
     case "app.store.authorize":
-      const { merchant, access_token, refresh_token, expires_in } = data;
-      await redis.set(`store:${merchant}:tokens`, {
+    case "app.installed":
+      const merchantId = merchant || data?.merchant || data?.store_id;
+      const access_token = data?.access_token;
+      const refresh_token = data?.refresh_token;
+      const expires = data?.expires || data?.expires_in || 1209599;
+
+      if (!merchantId) {
+        console.error("❌ No merchant ID found");
+        console.error("Full body:", JSON.stringify(req.body, null, 2));
+        return res.status(400).json({ error: "Missing merchant ID" });
+      }
+
+      if (!access_token) {
+        console.error("❌ No access token found for merchant:", merchantId);
+        console.error("Data received:", JSON.stringify(data, null, 2));
+        return res.status(400).json({ error: "Missing access token" });
+      }
+
+      const tokenData = {
         access_token,
         refresh_token,
-        expires_at: Date.now() + expires_in * 1000,
-        merchant,
-      });
-      console.log(`✅ Tokens saved for merchant: ${merchant}`);
+        expires_at: Date.now() + expires * 1000,
+        merchant: merchantId,
+        installed_at: new Date().toISOString(),
+        scope: data?.scope,
+        token_type: data?.token_type || "bearer",
+      };
+
+      await redis.set(`store:${merchantId}:tokens`, tokenData);
+
+      console.log(`✅ Tokens saved for merchant: ${merchantId}`);
+      console.log(`🔑 Access token: ${access_token.substring(0, 30)}...`);
+      console.log(`🔄 Refresh token: ${refresh_token?.substring(0, 30)}...`);
+      console.log(`⏰ Expires in: ${expires} seconds (${Math.round(expires / 86400)} days)`);
+      console.log(`⏰ Expires at: ${new Date(Date.now() + expires * 1000).toISOString()}`);
       break;
 
     case "order.created":
       console.log(`🛒 New order created: ${data.id}`);
+      console.log(`💰 Order total: ${data?.total?.amount} ${data?.total?.currency}`);
       break;
 
     case "order.status.updated":
