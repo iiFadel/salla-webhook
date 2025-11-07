@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   // ✅ 1. Token-based verification
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${process.env.SALLA_TOKEN}`) {
+  if (!authHeader || authHeader !== `Bearer ${process.env.SALLA_SECRET}`) {
     console.error("❌ Invalid or missing webhook token");
     return res.status(401).json({ error: "Unauthorized" });
   }
