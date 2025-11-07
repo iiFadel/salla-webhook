@@ -7,31 +7,35 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  // ✅ 1. Token-based verification
-  const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${process.env.SALLA_SECRET}`) {
+  // Token from headers (Salla may send it without "Bearer ")
+  const headerAuth = req.headers["authorization"];
+  const signature = req.headers["x-salla-signature"];
+  const token = process.env.SALLA_WEBHOOK_TOKEN;
+
+  const valid =
+    headerAuth === token || // Salla sends raw token
+    headerAuth === `Bearer ${token}` || // curl/manual test
+    signature === token; // Salla using x-salla-signature
+
+  if (!valid) {
     console.error("❌ Invalid or missing webhook token");
+    console.log("Received headers:", req.headers);
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // ✅ 2. Extract the payload normally
+  // ✅ Token is valid — handle webhook
   const { event, data } = req.body;
+  console.log(`✅ Valid Webhook: ${event}`);
 
-  console.log(`✅ Valid Webhook Received: ${event}`);
-
-  // ✅ 3. Save tokens when merchant authorizes app
   if (event === "app.store.authorize") {
     const { merchant, access_token, refresh_token, expires_in } = data;
-
     await redis.set(`store:${merchant}:tokens`, {
       access_token,
       refresh_token,
       expires_at: Date.now() + expires_in * 1000,
-      merchant,
+      merchant
     });
-
-    console.log(`✅ Tokens stored for merchant: ${merchant}`);
-    return res.status(200).json({ received: true });
+    console.log(`✅ Tokens saved for merchant: ${merchant}`);
   }
 
 switch (event) {
