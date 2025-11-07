@@ -151,7 +151,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Check for newly created order (typically pending or under_review status)
+      // Check for newly created order (typically pending or under_review status).
       if (orderStatus === "pending" || orderStatus === "under_review" || orderStatus === "new" || !data?.status?.slug) {
         console.log(`🆕 Order ${orderId} is newly created/pending`);
         
