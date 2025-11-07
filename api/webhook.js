@@ -33,16 +33,18 @@ export default async function handler(req, res) {
   // Handle webhook events
   const { event, merchant, data } = req.body;
   console.log(`✅ Valid Webhook: ${event}`);
+  console.log(`🏪 Merchant: ${merchant}`);
   console.log("📦 Full webhook body:", JSON.stringify(req.body, null, 2));
 
   switch (event) {
     case "app.store.authorize":
-    case "app.installed":
       const merchantId = merchant || data?.merchant || data?.store_id;
       const access_token = data?.access_token;
       const refresh_token = data?.refresh_token;
-      const expires = data?.expires || data?.expires_in || 1209599;
-
+      const expires = data?.expires;
+      const scope = data?.scope;
+      const token_type = data?.token_type;
+      
       if (!merchantId) {
         console.error("❌ No merchant ID found");
         console.error("Full body:", JSON.stringify(req.body, null, 2));
@@ -58,11 +60,12 @@ export default async function handler(req, res) {
       const tokenData = {
         access_token,
         refresh_token,
-        expires_at: Date.now() + expires * 1000,
+        expires_at: expires,
+        expires_at_iso: new Date(expires * 1000).toISOString(),
         merchant: merchantId,
-        installed_at: new Date().toISOString(),
-        scope: data?.scope,
-        token_type: data?.token_type || "bearer",
+        authorized_at: created_at || new Date().toISOString(),
+        scope: scope,
+        token_type: token_type || "bearer",
       };
 
       await redis.set(`store:${merchantId}:tokens`, tokenData);
@@ -70,8 +73,7 @@ export default async function handler(req, res) {
       console.log(`✅ Tokens saved for merchant: ${merchantId}`);
       console.log(`🔑 Access token: ${access_token.substring(0, 30)}...`);
       console.log(`🔄 Refresh token: ${refresh_token?.substring(0, 30)}...`);
-      console.log(`⏰ Expires in: ${expires} seconds (${Math.round(expires / 86400)} days)`);
-      console.log(`⏰ Expires at: ${new Date(Date.now() + expires * 1000).toISOString()}`);
+      console.log(`⏰ Expires at: ${new Date(expires * 1000).toISOString()}`);
       break;
 
     case "order.created":
@@ -79,26 +81,45 @@ export default async function handler(req, res) {
       console.log(`💰 Order total: ${data?.total?.amount} ${data?.total?.currency}`);
       break;
 
-    case "order.status.updated":
-      console.log(`✅ Order status updated: ${data.id} → ${data.status?.name}`);
-      const newStatus = data.status?.name?.toLowerCase();
-
-      if (newStatus === "paid" && process.env.N8N_PAYMENT_WEBHOOK_URL) {
-        await fetch(process.env.N8N_PAYMENT_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order_id: data.id, status: newStatus }),
-        });
-      }
-
-      if ((newStatus === "cancelled" || newStatus === "canceled") && process.env.N8N_CANCELLATION_WEBHOOK_URL) {
-        await fetch(process.env.N8N_CANCELLATION_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order_id: data.id, status: newStatus }),
-        });
-      }
+    case "app.installed":
+      console.log(`📲 App installed for merchant: ${merchant}`);
+      console.log(`🆔 App ID: ${data?.id}`);
+      console.log(`📝 App name: ${data?.app_name}`);
+      console.log(`🔐 Scopes: ${data?.app_scopes?.join(", ")}`);
+      console.log(`📅 Installation date: ${data?.installation_date}`);
+      
+      // Optionally store installation info
+      await redis.set(`store:${merchant}:app_info`, {
+        app_id: data?.id,
+        app_name: data?.app_name,
+        app_type: data?.app_type,
+        scopes: data?.app_scopes,
+        installation_date: data?.installation_date,
+        store_type: data?.store_type,
+      });
+      
+      console.log(`✅ App info saved for merchant: ${merchant}`);
       break;
+    // case "order.status.updated":
+    //   console.log(`✅ Order status updated: ${data.id} → ${data.status?.name}`);
+    //   const newStatus = data.status?.name?.toLowerCase();
+
+    //   if (newStatus === "paid" && process.env.N8N_PAYMENT_WEBHOOK_URL) {
+    //     await fetch(process.env.N8N_PAYMENT_WEBHOOK_URL, {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json" },
+    //       body: JSON.stringify({ order_id: data.id, status: newStatus }),
+    //     });
+    //   }
+
+    //   if ((newStatus === "cancelled" || newStatus === "canceled") && process.env.N8N_CANCELLATION_WEBHOOK_URL) {
+    //     await fetch(process.env.N8N_CANCELLATION_WEBHOOK_URL, {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json" },
+    //       body: JSON.stringify({ order_id: data.id, status: newStatus }),
+    //     });
+    //   }
+    //   break;
 
     default:
       console.log(`⚠️ Ignored event: ${event}`);
