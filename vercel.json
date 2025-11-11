@@ -1,7 +1,9 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/api/webhook", "dest": "/api/webhook.js" }
+    { "src": "/api/webhook", "dest": "/api/webhook.js" },
+    { "src": "/api/get-token", "dest": "/api/get-token.js" },
+    { "src": "/api/refresh-tokens", "dest": "/api/refresh-tokens.js" }
   ],
   "crons": [
     {
