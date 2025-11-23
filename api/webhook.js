@@ -123,6 +123,38 @@ export default async function handler(req, res) {
         }
       }
 
+      if (
+        orderStatus === "under_review" || 
+        orderStatus === "under-review" ||
+        orderStatusName?.toLowerCase().includes("under review") ||
+        orderStatusName?.toLowerCase().includes("قيد المراجعة")
+      ) {
+        console.log(`🔍 Order ${orderId} is UNDER REVIEW`);
+        
+        if (process.env.N8N_UNDER_REVIEW_WEBHOOK_URL) {
+          try {
+            await fetch(process.env.N8N_UNDER_REVIEW_WEBHOOK_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: orderId,
+                reference_id: data.reference_id,
+                status: orderStatus,
+                merchant: merchant,
+                total: data?.amounts?.total || data?.total,
+                customer: data?.customer,
+                payment_method: data?.payment_method,
+                event: "order.updated.under_review",
+                timestamp: new Date().toISOString(),
+              }),
+            });
+            console.log(`✅ Under Review webhook sent to N8N for order ${orderId}`);
+          } catch (error) {
+            console.error(`❌ Failed to send under review webhook:`, error);
+          }
+        }
+      }
+      
       // Check for cancelled status
       if (orderStatus === "cancelled" || orderStatus === "canceled" || orderStatus === "deleted" || orderStatusName?.toLowerCase().includes("cancel")|| orderStatusName?.toLowerCase().includes("محذوف")) {
         console.log(`❌ Order ${orderId} is cancelled`);
