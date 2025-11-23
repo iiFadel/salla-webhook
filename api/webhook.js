@@ -85,7 +85,7 @@ export default async function handler(req, res) {
       const orderId = data?.id;
       const orderStatus = data?.status?.slug?.toLowerCase();
       const orderStatusName = data?.status?.name;
-      
+      console.log(`🔍 DEBUG - Raw status object:`, JSON.stringify(data?.status, null, 2));
       if (!orderId) {
         console.error("❌ No order ID found in order.updated event");
         break;
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
       }
 
       // Check for cancelled status
-      if (orderStatus === "cancelled" || orderStatus === "canceled" || orderStatusName?.toLowerCase().includes("cancel")) {
+      if (orderStatus === "cancelled" || orderStatus === "canceled" || orderStatus === "deleted" || orderStatusName?.toLowerCase().includes("cancel")|| orderStatusName?.toLowerCase().includes("محذوف")) {
         console.log(`❌ Order ${orderId} is cancelled`);
         
         // Trigger N8N cancellation webhook if configured
